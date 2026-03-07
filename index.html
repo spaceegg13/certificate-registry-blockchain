@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CertChain — Registre de Propriété Numérique</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:       #050a0e;
+      --surface:  #0b1520;
+      --card:     #0f1e2e;
+      --border:   #1a3a5c;
+      --accent:   #00d4ff;
+      --accent2:  #00ff9d;
+      --warn:     #ff6b35;
+      --text:     #c8e6f5;
+      --muted:    #4a7a9b;
+      --font-mono: 'Space Mono', monospace;
+      --font-sans: 'Syne', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Grid background ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,212,255,.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Glow orbs ── */
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: .18;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .orb-1 { width: 600px; height: 600px; background: #00d4ff; top: -200px; left: -200px; }
+    .orb-2 { width: 500px; height: 500px; background: #00ff9d; bottom: -150px; right: -150px; }
+
+    /* ── Header ── */
+    header {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.4rem 2.5rem;
+      border-bottom: 1px solid var(--border);
+      background: rgba(5,10,14,.85);
+      backdrop-filter: blur(12px);
+    }
+
+    .logo {
+      font-size: 1.5rem;
+      font-weight: 800;
+      letter-spacing: -.5px;
+      color: #fff;
+    }
+    .logo span { color: var(--accent); }
+
+    #connectBtn {
+      font-family: var(--font-mono);
+      font-size: .8rem;
+      padding: .55rem 1.2rem;
+      background: transparent;
+      border: 1.5px solid var(--accent);
+      color: var(--accent);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all .2s;
+      letter-spacing: 1px;
+    }
+    #connectBtn:hover { background: var(--accent); color: var(--bg); }
+    #connectBtn.connected { border-color: var(--accent2); color: var(--accent2); }
+
+    #walletAddress {
+      font-family: var(--font-mono);
+      font-size: .75rem;
+      color: var(--muted);
+      margin-right: 1rem;
+    }
+
+    /* ── Layout ── */
+    main {
+      position: relative;
+      z-index: 5;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 4rem;
+    }
+
+    /* ── Section heading ── */
+    .section-label {
+      font-family: var(--font-mono);
+      font-size: .7rem;
+      letter-spacing: 3px;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: .5rem;
+    }
+    h2 {
+      font-size: 1.7rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 1.8rem;
+    }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: flex;
+      gap: 1px;
+      margin-bottom: 3rem;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .stat {
+      flex: 1;
+      background: var(--surface);
+      padding: 1.2rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: .3rem;
+    }
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--accent);
+      font-family: var(--font-mono);
+    }
+    .stat-label {
+      font-size: .75rem;
+      color: var(--muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    /* ── Panel grid ── */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+
+    /* ── Card ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.8rem;
+      position: relative;
+      overflow: hidden;
+      transition: border-color .25s;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      opacity: 0;
+      transition: opacity .25s;
+    }
+    .card:hover { border-color: rgba(0,212,255,.35); }
+    .card:hover::before { opacity: 1; }
+
+    .card-icon {
+      font-size: 1.6rem;
+      margin-bottom: 1rem;
+    }
+    .card h3 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 1.2rem;
+    }
+
+    /* ── Form elements ── */
+    label {
+      display: block;
+      font-size: .72rem;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: .4rem;
+      margin-top: .9rem;
+    }
+    label:first-of-type { margin-top: 0; }
+
+    input[type="text"],
+    input[type="number"],
+    textarea {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: .8rem;
+      padding: .65rem .85rem;
+      outline: none;
+      transition: border-color .2s;
+    }
+    input:focus, textarea:focus { border-color: var(--accent); }
+    textarea { resize: vertical; min-height: 70px; }
+
+    /* File drop zone */
+    .dropzone {
+      border: 1.5px dashed var(--border);
+      border-radius: 6px;
+      padding: 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all .2s;
+      background: var(--surface);
+      margin-bottom: .6rem;
+    }
+    .dropzone:hover, .dropzone.active {
+      border-color: var(--accent);
+      background: rgba(0,212,255,.04);
+    }
+    .dropzone p { font-size: .8rem; color: var(--muted); }
+    .dropzone strong { color: var(--accent); }
+    #fileInput { display: none; }
+    #hashDisplay {
+      font-family: var(--font-mono);
+      font-size: .7rem;
+      color: var(--accent2);
+      word-break: break-all;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: .5rem .75rem;
+      display: none;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      font-family: var(--font-mono);
+      font-size: .78rem;
+      letter-spacing: 1px;
+      padding: .7rem 1.4rem;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      transition: all .2s;
+      margin-top: 1.2rem;
+      width: 100%;
+      justify-content: center;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #0099bb);
+      color: var(--bg);
+      font-weight: 700;
+    }
+    .btn-primary:hover { filter: brightness(1.15); transform: translateY(-1px); }
+    .btn-secondary {
+      background: transparent;
+      border: 1.5px solid var(--accent2);
+      color: var(--accent2);
+    }
+    .btn-secondary:hover { background: rgba(0,255,157,.08); }
+    .btn-danger {
+      background: transparent;
+      border: 1.5px solid var(--warn);
+      color: var(--warn);
+    }
+    .btn-danger:hover { background: rgba(255,107,53,.08); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; transform: none; filter: none; }
+
+    /* ── Certificate display ── */
+    .cert-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1.4rem;
+      margin-top: 1rem;
+      display: none;
+      position: relative;
+    }
+    .cert-card.show { display: block; animation: fadeIn .3s ease; }
+    .cert-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1rem;
+    }
+    .cert-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #fff;
+    }
+    .badge {
+      font-family: var(--font-mono);
+      font-size: .65rem;
+      padding: .2rem .6rem;
+      border-radius: 20px;
+      letter-spacing: 1px;
+    }
+    .badge-valid { background: rgba(0,255,157,.12); color: var(--accent2); border: 1px solid var(--accent2); }
+    .badge-invalid { background: rgba(255,107,53,.12); color: var(--warn); border: 1px solid var(--warn); }
+
+    .cert-row {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: .8rem;
+    }
+    .cert-key {
+      font-size: .65rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: .2rem;
+    }
+    .cert-val {
+      font-family: var(--font-mono);
+      font-size: .78rem;
+      color: var(--text);
+      word-break: break-all;
+    }
+    .cert-val.highlight { color: var(--accent); }
+
+    /* ── Event log ── */
+    .log-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      height: 220px;
+      overflow-y: auto;
+      padding: .8rem 1rem;
+      margin-top: 1rem;
+    }
+    .log-entry {
+      font-family: var(--font-mono);
+      font-size: .72rem;
+      padding: .35rem 0;
+      border-bottom: 1px solid rgba(26,58,92,.5);
+      display: flex;
+      gap: .75rem;
+      animation: fadeIn .3s ease;
+    }
+    .log-time { color: var(--muted); white-space: nowrap; }
+    .log-msg { color: var(--text); }
+    .log-msg.ok { color: var(--accent2); }
+    .log-msg.err { color: var(--warn); }
+    .log-msg.info { color: var(--accent); }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      z-index: 999;
+      font-family: var(--font-mono);
+      font-size: .8rem;
+      padding: .9rem 1.4rem;
+      border-radius: 6px;
+      max-width: 340px;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all .35s cubic-bezier(.34,1.56,.64,1);
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+    #toast.success { background: rgba(0,255,157,.15); border: 1px solid var(--accent2); color: var(--accent2); }
+    #toast.error   { background: rgba(255,107,53,.15); border: 1px solid var(--warn); color: var(--warn); }
+    #toast.info    { background: rgba(0,212,255,.12); border: 1px solid var(--accent); color: var(--accent); }
+
+    /* ── Spinner ── */
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(0,0,0,.3);
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    /* ── Full-width card ── */
+    .card-full { grid-column: 1 / -1; }
+
+    /* ── Network warning ── */
+    #networkWarn {
+      display: none;
+      background: rgba(255,107,53,.08);
+      border: 1px solid var(--warn);
+      border-radius: 6px;
+      padding: .8rem 1.2rem;
+      font-size: .8rem;
+      color: var(--warn);
+      margin-bottom: 1.5rem;
+      font-family: var(--font-mono);
+    }
+  </style>
+</head>
+<body>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+
+  <header>
+    <div class="logo">Cert<span>Chain</span></div>
+    <div style="display:flex;align-items:center;gap:1rem">
+      <span id="walletAddress">Non connecté</span>
+      <button id="connectBtn" onclick="connectWallet()">Connecter MetaMask</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="networkWarn">⚠ Réseau non reconnu — déployez le contrat sur ce réseau et mettez à jour CONTRACT_ADDRESS.</div>
+
+    <!-- Stats -->
+    <div class="stats-bar">
+      <div class="stat">
+        <span class="stat-value" id="totalCerts">—</span>
+        <span class="stat-label">Certificats enregistrés</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="myCount">—</span>
+        <span class="stat-label">Mes certificats</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="networkName">—</span>
+        <span class="stat-label">Réseau</span>
+      </div>
+    </div>
+
+    <!-- Row 1 -->
+    <div class="grid">
+
+      <!-- Register -->
+      <div class="card">
+        <div class="card-icon">📄</div>
+        <h3>Enregistrer un fichier</h3>
+
+        <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+          <input type="file" id="fileInput" onchange="handleFile(event)"/>
+          <p>Glissez un fichier ou <strong>cliquez pour parcourir</strong></p>
+          <p id="fileName" style="margin-top:.5rem;font-size:.75rem;color:var(--accent)"></p>
+        </div>
+        <div id="hashDisplay"></div>
+
+        <label>Nom du fichier</label>
+        <input type="text" id="reg_name" placeholder="mon_document.pdf"/>
+
+        <label>Hash / URI (calculé automatiquement ou manuel)</label>
+        <input type="text" id="reg_hash" placeholder="0xabc123… ou ipfs://Qm…"/>
+
+        <label>Métadonnées (facultatif)</label>
+        <textarea id="reg_meta" placeholder="Description, tags, version…"></textarea>
+
+        <button class="btn btn-primary" id="regBtn" onclick="registerFile()">
+          ⛓ Enregistrer le certificat
+        </button>
+      </div>
+
+      <!-- Lookup -->
+      <div class="card">
+        <div class="card-icon">🔍</div>
+        <h3>Afficher un certificat</h3>
+
+        <label>ID du certificat</label>
+        <input type="number" id="lookup_id" placeholder="1" min="1"/>
+        <button class="btn btn-secondary" onclick="lookupCertificate()">Rechercher</button>
+
+        <div class="cert-card" id="certDisplay">
+          <div class="cert-header">
+            <span class="cert-title" id="cert_name"></span>
+            <span class="badge" id="cert_badge"></span>
+          </div>
+          <div class="cert-row">
+            <span class="cert-key">ID</span>
+            <span class="cert-val" id="cert_id"></span>
+          </div>
+          <div class="cert-row">
+            <span class="cert-key">Hash / URI</span>
+            <span class="cert-val highlight" id="cert_hash"></span>
+          </div>
+          <div class="cert-row">
+            <span class="cert-key">Propriétaire</span>
+            <span class="cert-val" id="cert_owner"></span>
+          </div>
+          <div class="cert-row">
+            <span class="cert-key">Émetteur</span>
+            <span class="cert-val" id="cert_issuer"></span>
+          </div>
+          <div class="cert-row">
+            <span class="cert-key">Date d'émission</span>
+            <span class="cert-val" id="cert_time"></span>
+          </div>
+          <div class="cert-row">
+            <span class="cert-key">Métadonnées</span>
+            <span class="cert-val" id="cert_meta"></span>
+          </div>
+        </div>
+
+        <!-- Check hash -->
+        <hr style="border-color:var(--border);margin:1.5rem 0"/>
+        <h3 style="font-size:.95rem">Vérifier un hash</h3>
+        <label>Hash à vérifier</label>
+        <input type="text" id="check_hash" placeholder="0xabc123…"/>
+        <button class="btn btn-secondary" onclick="checkHash()">Vérifier l'unicité</button>
+        <div id="hashResult" style="font-family:var(--font-mono);font-size:.75rem;margin-top:.6rem"></div>
+      </div>
+    </div>
+
+    <!-- Row 2 -->
+    <div class="grid">
+
+      <!-- Transfer -->
+      <div class="card">
+        <div class="card-icon">🔄</div>
+        <h3>Transférer la propriété</h3>
+
+        <label>ID du certificat</label>
+        <input type="number" id="tx_id" placeholder="1" min="1"/>
+
+        <label>Adresse du nouveau propriétaire</label>
+        <input type="text" id="tx_to" placeholder="0x…"/>
+
+        <button class="btn btn-primary" onclick="transferCertificate()">
+          ➡ Transférer
+        </button>
+      </div>
+
+      <!-- Revoke + My certs -->
+      <div class="card">
+        <div class="card-icon">🚫</div>
+        <h3>Révoquer un certificat</h3>
+        <p style="font-size:.78rem;color:var(--muted);margin-bottom:.8rem">Seul l'émetteur peut révoquer.</p>
+
+        <label>ID du certificat</label>
+        <input type="number" id="rev_id" placeholder="1" min="1"/>
+
+        <button class="btn btn-danger" onclick="revokeCertificate()">
+          ✕ Révoquer
+        </button>
+
+        <hr style="border-color:var(--border);margin:1.5rem 0"/>
+        <h3 style="font-size:.95rem">Mes certificats</h3>
+        <button class="btn btn-secondary" onclick="loadMyCertificates()">Charger mes certificats</button>
+        <div id="myList" style="margin-top:.8rem;font-family:var(--font-mono);font-size:.75rem;color:var(--muted)"></div>
+      </div>
+
+      <!-- Event log -->
+      <div class="card card-full">
+        <div class="card-icon">📡</div>
+        <h3>Journal des transactions</h3>
+        <div class="log-wrap" id="eventLog">
+          <div class="log-entry">
+            <span class="log-time">--:--:--</span>
+            <span class="log-msg info">Interface initialisée. Connectez MetaMask pour commencer.</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <div id="toast"></div>
+
+  <script>
+    // ─────────────────────────────────────────────
+    // après déploiement via Remix ou Hardhat
+    // ─────────────────────────────────────────────
+    const CONTRACT_ADDRESS = "0x9D7f74d0C41E726EC95884E0e97Fa6129e3b5E99";
+
+    const ABI = [
+      "function registerFile(string _fileName, string _fileHash, string _metadata) returns (uint256)",
+      "function transfer(uint256 _certificateId, address _newOwner)",
+      "function getCertificate(uint256 _certificateId) view returns (uint256,string,string,address,address,uint256,bool,string)",
+      "function revokeCertificate(uint256 _certificateId)",
+      "function getCertificatesByOwner(address _owner) view returns (uint256[])",
+      "function isHashRegistered(string _fileHash) view returns (bool)",
+      "function getTotalCertificates() view returns (uint256)",
+      "event FileRegistered(uint256 indexed id, string fileName, address indexed owner, address indexed issuer)",
+      "event CertificateTransferred(uint256 indexed id, address indexed from, address indexed to)",
+      "event CertificateRevoked(uint256 indexed id, address indexed issuer)"
+    ];
+
+    let provider, signer, contract;
+
+    // ── Wallet connection ──
+    async function connectWallet() {
+      if (!window.ethereum) return toast("MetaMask non détecté !", "error");
+      try {
+        provider = new ethers.BrowserProvider(window.ethereum);
+        await provider.send("eth_requestAccounts", []);
+        signer   = await provider.getSigner();
+        contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+        const addr    = await signer.getAddress();
+        const network = await provider.getNetwork();
+
+        document.getElementById("walletAddress").textContent = shortAddr(addr);
+        const btn = document.getElementById("connectBtn");
+        btn.textContent = "Connecté ✓";
+        btn.classList.add("connected");
+
+        document.getElementById("networkName").textContent = network.name === "unknown" ? `Chain ${network.chainId}` : network.name;
+
+        log(`Wallet connecté : ${addr}`, "ok");
+        await refreshStats();
+        listenEvents();
+      } catch (e) {
+        toast("Connexion refusée", "error");
+        log(e.message, "err");
+      }
+    }
+
+    // ── Register ──
+    async function registerFile() {
+      if (!contract) return toast("Connectez MetaMask d'abord", "error");
+      const name = document.getElementById("reg_name").value.trim();
+      const hash = document.getElementById("reg_hash").value.trim();
+      const meta = document.getElementById("reg_meta").value.trim();
+      if (!name || !hash) return toast("Nom et hash requis", "error");
+
+      const btn = document.getElementById("regBtn");
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Transaction en cours…';
+      try {
+        const tx = await contract.registerFile(name, hash, meta);
+        log(`TX envoyée : ${tx.hash}`, "info");
+        const receipt = await tx.wait();
+        log(`Certificat enregistré — bloc #${receipt.blockNumber}`, "ok");
+        toast("Certificat enregistré avec succès ✓", "success");
+        await refreshStats();
+        document.getElementById("reg_name").value = "";
+        document.getElementById("reg_hash").value = "";
+        document.getElementById("reg_meta").value = "";
+        document.getElementById("hashDisplay").style.display = "none";
+        document.getElementById("fileName").textContent = "";
+      } catch (e) {
+        handleError(e);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = "⛓ Enregistrer le certificat";
+      }
+    }
+
+    // ── Lookup ──
+    async function lookupCertificate() {
+      if (!contract) return toast("Connectez MetaMask d'abord", "error");
+      const id = document.getElementById("lookup_id").value;
+      if (!id) return toast("Entrez un ID", "error");
+      try {
+        const r = await contract.getCertificate(id);
+        const [cid, fileName, fileHash, owner, issuer, timestamp, isValid, metadata] = r;
+        document.getElementById("cert_name").textContent = fileName;
+        document.getElementById("cert_id").textContent   = cid.toString();
+        document.getElementById("cert_hash").textContent = fileHash;
+        document.getElementById("cert_owner").textContent = owner;
+        document.getElementById("cert_issuer").textContent = issuer;
+        document.getElementById("cert_time").textContent  = new Date(Number(timestamp) * 1000).toLocaleString("fr-FR");
+        document.getElementById("cert_meta").textContent  = metadata || "—";
+        const badge = document.getElementById("cert_badge");
+        badge.textContent = isValid ? "✓ VALIDE" : "✕ RÉVOQUÉ";
+        badge.className = "badge " + (isValid ? "badge-valid" : "badge-invalid");
+        document.getElementById("certDisplay").classList.add("show");
+        log(`Certificat #${id} chargé`, "ok");
+      } catch (e) {
+        handleError(e);
+      }
+    }
+
+    // ── Transfer ──
+    async function transferCertificate() {
+      if (!contract) return toast("Connectez MetaMask d'abord", "error");
+      const id = document.getElementById("tx_id").value;
+      const to = document.getElementById("tx_to").value.trim();
+      if (!id || !to) return toast("ID et adresse requis", "error");
+      try {
+        const tx = await contract.transfer(id, to);
+        log(`Transfert TX : ${tx.hash}`, "info");
+        await tx.wait();
+        log(`Certificat #${id} transféré à ${shortAddr(to)}`, "ok");
+        toast("Transfert effectué ✓", "success");
+        await refreshStats();
+      } catch (e) {
+        handleError(e);
+      }
+    }
+
+    // ── Revoke ──
+    async function revokeCertificate() {
+      if (!contract) return toast("Connectez MetaMask d'abord", "error");
+      const id = document.getElementById("rev_id").value;
+      if (!id) return toast("Entrez un ID", "error");
+      if (!confirm(`Révoquer le certificat #${id} ? Action irréversible.`)) return;
+      try {
+        const tx = await contract.revokeCertificate(id);
+        log(`Révocation TX : ${tx.hash}`, "info");
+        await tx.wait();
+        log(`Certificat #${id} révoqué`, "ok");
+        toast("Certificat révoqué", "success");
+      } catch (e) {
+        handleError(e);
+      }
+    }
+
+    // ── My certs ──
+    async function loadMyCertificates() {
+      if (!contract) return toast("Connectez MetaMask d'abord", "error");
+      try {
+        const addr = await signer.getAddress();
+        const ids  = await contract.getCertificatesByOwner(addr);
+        const el   = document.getElementById("myList");
+        if (ids.length === 0) {
+          el.textContent = "Aucun certificat trouvé.";
+          return;
+        }
+        el.innerHTML = ids.map(id =>
+          `<div style="padding:.3rem 0;border-bottom:1px solid var(--border);cursor:pointer;color:var(--accent)"
+               onclick="document.getElementById('lookup_id').value=${id};lookupCertificate()">
+             #${id} ↗
+           </div>`
+        ).join("");
+        document.getElementById("myCount").textContent = ids.length;
+      } catch (e) {
+        handleError(e);
+      }
+    }
+
+    // ── Check hash ──
+    async function checkHash() {
+      if (!contract) return toast("Connectez MetaMask d'abord", "error");
+      const h = document.getElementById("check_hash").value.trim();
+      if (!h) return toast("Entrez un hash", "error");
+      try {
+        const exists = await contract.isHashRegistered(h);
+        const el = document.getElementById("hashResult");
+        el.style.color = exists ? "var(--warn)" : "var(--accent2)";
+        el.textContent = exists ? "✕ Ce hash est déjà enregistré." : "✓ Hash disponible — non enregistré.";
+      } catch (e) {
+        handleError(e);
+      }
+    }
+
+    // ── Stats ──
+    async function refreshStats() {
+      try {
+        const total = await contract.getTotalCertificates();
+        document.getElementById("totalCerts").textContent = total.toString();
+        const addr = await signer.getAddress();
+        const ids  = await contract.getCertificatesByOwner(addr);
+        document.getElementById("myCount").textContent = ids.length;
+      } catch (_) {}
+    }
+
+    // ── Events listener ──
+    function listenEvents() {
+      contract.on("FileRegistered", (id, fileName, owner, issuer) => {
+        log(`FileRegistered — #${id} "${fileName}" par ${shortAddr(owner)}`, "ok");
+      });
+      contract.on("CertificateTransferred", (id, from, to) => {
+        log(`Transfer — #${id} : ${shortAddr(from)} → ${shortAddr(to)}`, "ok");
+      });
+      contract.on("CertificateRevoked", (id, issuer) => {
+        log(`Revoked — #${id} par ${shortAddr(issuer)}`, "err");
+      });
+    }
+
+    // ── File → SHA-256 hash ──
+    async function handleFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      document.getElementById("fileName").textContent = file.name;
+      document.getElementById("reg_name").value = file.name;
+      const buffer = await file.arrayBuffer();
+      const hashBuf = await crypto.subtle.digest("SHA-256", buffer);
+      const hex = "0x" + Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2,"0")).join("");
+      document.getElementById("reg_hash").value = hex;
+      const disp = document.getElementById("hashDisplay");
+      disp.textContent = hex;
+      disp.style.display = "block";
+    }
+
+    // ── Drag & drop ──
+    const dz = document.getElementById("dropzone");
+    dz.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("active"); });
+    dz.addEventListener("dragleave", () => dz.classList.remove("active"));
+    dz.addEventListener("drop", e => {
+      e.preventDefault();
+      dz.classList.remove("active");
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        document.getElementById("fileInput").files = dt.files;
+        handleFile({ target: { files: [file] } });
+      }
+    });
+
+    // ── Helpers ──
+    function shortAddr(a) {
+      return a.slice(0,6) + "…" + a.slice(-4);
+    }
+
+    function log(msg, type = "info") {
+      const el = document.getElementById("eventLog");
+      const now = new Date().toLocaleTimeString("fr-FR");
+      const div = document.createElement("div");
+      div.className = "log-entry";
+      div.innerHTML = `<span class="log-time">${now}</span><span class="log-msg ${type}">${msg}</span>`;
+      el.appendChild(div);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    let toastTimer;
+    function toast(msg, type = "info") {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.className = `show ${type}`;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove("show"), 3500);
+    }
+
+    function handleError(e) {
+      const msg = e?.reason || e?.message || "Erreur inconnue";
+      toast(msg.slice(0, 120), "error");
+      log(msg, "err");
+    }
+
+    // Auto-reconnect if already authorized
+    window.addEventListener("load", async () => {
+      if (window.ethereum && window.ethereum.selectedAddress) connectWallet();
+    });
+    window.ethereum?.on?.("accountsChanged", () => connectWallet());
+    window.ethereum?.on?.("chainChanged",    () => location.reload());
+  </script>
+</body>
+</html>
