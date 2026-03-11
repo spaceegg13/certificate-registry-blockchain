@@ -854,8 +854,25 @@
     });
     window.ethereum?.on?.("accountsChanged", () => connectWallet());
     window.ethereum?.on?.("chainChanged",    () => location.reload());
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    
+    // Request account access if needed
+    await ethereum.request({ method: "eth_requestAccounts" });
+
+    // Get current network
+    const network = await provider.getNetwork();
+
+    if (network.chainId !== 11155111) { // 11155111 = Sepolia
+      alert("Please switch MetaMask to Sepolia Testnet!");
+    } else {
+      console.log("Connected to Sepolia ✅");
+    }
+  }
+
+  checkNetwork();
   </script>
 </body>
 
 </html>
+
 
