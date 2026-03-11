@@ -418,15 +418,86 @@
       margin-bottom: 1.5rem;
       font-family: var(--font-mono);
     }
+
+    /* ── Network gate overlay ── */
+    #networkGate {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 999;
+      background: rgba(5,10,14,.96);
+      backdrop-filter: blur(12px);
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 1.2rem;
+      text-align: center;
+      padding: 2rem;
+    }
+    #networkGate.show { display: flex; }
+    #networkGate .gate-icon { font-size: 3rem; }
+    #networkGate h2 { font-size: 1.5rem; color: var(--warn); }
+    #networkGate p { font-size: .9rem; color: var(--muted); max-width: 400px; line-height: 1.6; }
+    #networkGate .chain-badge {
+      font-family: var(--font-mono);
+      font-size: .8rem;
+      background: rgba(0,212,255,.08);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      padding: .4rem 1rem;
+      border-radius: 20px;
+    }
+    #switchNetworkBtn {
+      font-family: var(--font-mono);
+      font-size: .8rem;
+      padding: .7rem 1.8rem;
+      background: linear-gradient(135deg, var(--warn), #cc4400);
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: filter .2s;
+      letter-spacing: 1px;
+    }
+    #switchNetworkBtn:hover { filter: brightness(1.15); }
+
+    /* ── Network status pill ── */
+    #networkPill {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      font-family: var(--font-mono);
+      font-size: .7rem;
+      padding: .3rem .8rem;
+      border-radius: 20px;
+      margin-right: .5rem;
+    }
+    #networkPill.ok   { background: rgba(0,255,157,.1); border: 1px solid var(--accent2); color: var(--accent2); }
+    #networkPill.bad  { background: rgba(255,107,53,.1); border: 1px solid var(--warn);   color: var(--warn); }
+    #networkPill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
   </style>
 </head>
 <body>
   <div class="orb orb-1"></div>
   <div class="orb orb-2"></div>
 
+  <!-- Network Gate Overlay -->
+  <div id="networkGate">
+    <div class="gate-icon">⛔</div>
+    <h2>Mauvais réseau détecté</h2>
+    <p>Cette application fonctionne uniquement sur le réseau de test <strong style="color:#fff">Sepolia</strong>. Veuillez changer de réseau pour continuer.</p>
+    <div class="chain-badge">✓ Réseau requis : Sepolia (Chain ID 11155111)</div>
+    <div id="currentChainBadge" style="font-family:var(--font-mono);font-size:.75rem;color:var(--warn);margin-top:.3rem"></div>
+    <button id="switchNetworkBtn" onclick="switchToSepolia()">🔄 Basculer vers Sepolia automatiquement</button>
+  </div>
+
   <header>
     <div class="logo">Cert<span>Chain</span></div>
-    <div style="display:flex;align-items:center;gap:1rem">
+    <div style="display:flex;align-items:center;gap:.6rem">
+      <span id="networkPill" style="display:none">
+        <span class="dot"></span>
+        <span id="networkPillText"></span>
+      </span>
       <span id="walletAddress">Non connecté</span>
       <button id="connectBtn" onclick="connectWallet()">Connecter MetaMask</button>
     </div>
@@ -587,9 +658,57 @@
 
   <script>
     // ─────────────────────────────────────────────
+    // CONFIGURATION — mettez à jour CONTRACT_ADDRESS
     // après déploiement via Remix ou Hardhat
     // ─────────────────────────────────────────────
-    const CONTRACT_ADDRESS = "0xdB949E38991F9d58f963E77DA396217239268652";
+    const CONTRACT_ADDRESS = "0xdB949E38991F9d58f963E77DA396217239268652"; // ← remplacer
+    const SEPOLIA_CHAIN_ID = "0xaa36a7"; // 11155111 in hex
+
+    // ── Network check ──
+    async function checkNetwork() {
+      if (!window.ethereum) return false;
+      const chainId = await window.ethereum.request({ method: "eth_chainId" });
+      const isOk = chainId === SEPOLIA_CHAIN_ID;
+      const pill = document.getElementById("networkPill");
+      const pillText = document.getElementById("networkPillText");
+      pill.style.display = "inline-flex";
+      if (isOk) {
+        pill.className = "ok";
+        pillText.textContent = "Sepolia ✓";
+        document.getElementById("networkGate").classList.remove("show");
+      } else {
+        pill.className = "bad";
+        pillText.textContent = "Mauvais réseau ✕";
+        document.getElementById("currentChainBadge").textContent = `Réseau actuel : Chain ID ${parseInt(chainId, 16)}`;
+        document.getElementById("networkGate").classList.add("show");
+      }
+      return isOk;
+    }
+
+    async function switchToSepolia() {
+      try {
+        await window.ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: SEPOLIA_CHAIN_ID }]
+        });
+      } catch (e) {
+        if (e.code === 4902) {
+          // Add Sepolia if not present
+          await window.ethereum.request({
+            method: "wallet_addEthereumChain",
+            params: [{
+              chainId: SEPOLIA_CHAIN_ID,
+              chainName: "Sepolia Test Network",
+              nativeCurrency: { name: "SepoliaETH", symbol: "SEP", decimals: 18 },
+              rpcUrls: ["https://rpc.sepolia.org"],
+              blockExplorerUrls: ["https://sepolia.etherscan.io"]
+            }]
+          });
+        } else {
+          toast("Impossible de changer de réseau", "error");
+        }
+      }
+    }
 
     const ABI = [
       "function registerFile(string _fileName, string _fileHash, string _metadata) returns (uint256)",
@@ -612,6 +731,10 @@
       try {
         provider = new ethers.BrowserProvider(window.ethereum);
         await provider.send("eth_requestAccounts", []);
+
+        const ok = await checkNetwork();
+        if (!ok) return; // gate overlay will show
+
         signer   = await provider.getSigner();
         contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
 
@@ -623,9 +746,9 @@
         btn.textContent = "Connecté ✓";
         btn.classList.add("connected");
 
-        document.getElementById("networkName").textContent = network.name === "unknown" ? `Chain ${network.chainId}` : network.name;
+        document.getElementById("networkName").textContent = "Sepolia";
 
-        log(`Wallet connecté : ${addr}`, "ok");
+        log(`Wallet connecté sur Sepolia : ${addr}`, "ok");
         await refreshStats();
         listenEvents();
       } catch (e) {
@@ -854,11 +977,6 @@
     });
     window.ethereum?.on?.("accountsChanged", () => connectWallet());
     window.ethereum?.on?.("chainChanged",    () => location.reload());
-
   </script>
 </body>
-
 </html>
-
-
-
