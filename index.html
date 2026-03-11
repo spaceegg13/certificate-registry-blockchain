@@ -727,35 +727,37 @@
 
     // ── Wallet connection ──
     async function connectWallet() {
-      if (!window.ethereum) return toast("MetaMask non détecté !", "error");
-      try {
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
-        await provider.send("eth_requestAccounts", []);
+  if (!window.ethereum) return toast("MetaMask non détecté !", "error");
+  try {
+    provider = new ethers.BrowserProvider(window.ethereum);
+    
+    // Request accounts
+    await provider.send("eth_requestAccounts", []);
+    
+    // Small delay to let MetaMask fully respond
+    await new Promise(r => setTimeout(r, 200));
 
-        const ok = await checkNetwork();
-        if (!ok) return; // it'll stop if the network is wrong
-        contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
-        signer   = await provider.getSigner();
+    // Network check
+    const ok = await checkNetwork();
+    if (!ok) return; // shows gate overlay
 
-        const addr    = await signer.getAddress();
-        const network = await provider.getNetwork();
+    signer   = await provider.getSigner();
+    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
 
-        document.getElementById("walletAddress").textContent = shortAddr(addr);
-        const btn = document.getElementById("connectBtn");
-        btn.textContent = "Connecté ✓";
-        btn.classList.add("connected");
-
-        document.getElementById("networkName").textContent = "Sepolia";
-
-        log(`Wallet connecté sur Sepolia : ${addr}`, "ok");
-        await refreshStats();
-        listenEvents();
-      } catch (e) {
-        toast("Connexion refusée", "error");
-        log(e.message, "err");
-      }
-    }
-
+    const addr = await signer.getAddress();
+    document.getElementById("walletAddress").textContent = shortAddr(addr);
+    const btn = document.getElementById("connectBtn");
+    btn.textContent = "Connecté ✓";
+    btn.classList.add("connected");
+    document.getElementById("networkName").textContent = "Sepolia";
+    log(`Wallet connecté sur Sepolia : ${addr}`, "ok");
+    await refreshStats();
+    listenEvents();
+  } catch (e) {
+    toast("Connexion refusée", "error");
+    log(e.message, "err");
+  }
+}
     // ── Register ──
     async function registerFile() {
       if (!contract) return toast("Connectez MetaMask d'abord", "error");
@@ -979,4 +981,5 @@
   </script>
 </body>
 </html>
+
 
