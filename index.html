@@ -658,17 +658,16 @@
 
   <script>
     // ─────────────────────────────────────────────
-    // CONFIGURATION — mettez à jour CONTRACT_ADDRESS
     // après déploiement via Remix ou Hardhat
     // ─────────────────────────────────────────────
-    const CONTRACT_ADDRESS = "0xdB949E38991F9d58f963E77DA396217239268652"; // ← remplacer
+    const CONTRACT_ADDRESS = "0x3ABa2a9353540f473630A7EE518D129DEF747A7D"; // ← remplacer
     const SEPOLIA_CHAIN_ID = "0xaa36a7"; // 11155111 in hex
 
     // ── Network check ──
     async function checkNetwork() {
       if (!window.ethereum) return false;
       const chainId = await window.ethereum.request({ method: "eth_chainId" });
-      const isOk = chainId === SEPOLIA_CHAIN_ID.toLowerCase();
+      const isOk = chainId === SEPOLIA_CHAIN_ID;
       const pill = document.getElementById("networkPill");
       const pillText = document.getElementById("networkPillText");
       pill.style.display = "inline-flex";
@@ -727,37 +726,36 @@
 
     // ── Wallet connection ──
     async function connectWallet() {
-  if (!window.ethereum) return toast("MetaMask non détecté !", "error");
-  try {
-    provider = new ethers.BrowserProvider(window.ethereum);
-    
-    // Request accounts
-    await provider.send("eth_requestAccounts", []);
-    
-    // Small delay to let MetaMask fully respond
-    await new Promise(r => setTimeout(r, 200));
+      if (!window.ethereum) return toast("MetaMask non détecté !", "error");
+      try {
+        provider = new ethers.BrowserProvider(window.ethereum);
+        await provider.send("eth_requestAccounts", []);
 
-    // Network check
-    const ok = await checkNetwork();
-    if (!ok) return; // shows gate overlay
+        const ok = await checkNetwork();
+        if (!ok) return; // gate overlay will show
 
-    signer   = await provider.getSigner();
-    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+        signer   = await provider.getSigner();
+        contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
 
-    const addr = await signer.getAddress();
-    document.getElementById("walletAddress").textContent = shortAddr(addr);
-    const btn = document.getElementById("connectBtn");
-    btn.textContent = "Connecté ✓";
-    btn.classList.add("connected");
-    document.getElementById("networkName").textContent = "Sepolia";
-    log(`Wallet connecté sur Sepolia : ${addr}`, "ok");
-    await refreshStats();
-    listenEvents();
-  } catch (e) {
-    toast("Connexion refusée", "error");
-    log(e.message, "err");
-  }
-}
+        const addr    = await signer.getAddress();
+        const network = await provider.getNetwork();
+
+        document.getElementById("walletAddress").textContent = shortAddr(addr);
+        const btn = document.getElementById("connectBtn");
+        btn.textContent = "Connecté ✓";
+        btn.classList.add("connected");
+
+        document.getElementById("networkName").textContent = "Sepolia";
+
+        log(`Wallet connecté sur Sepolia : ${addr}`, "ok");
+        await refreshStats();
+        listenEvents();
+      } catch (e) {
+        toast("Connexion refusée", "error");
+        log(e.message, "err");
+      }
+    }
+
     // ── Register ──
     async function registerFile() {
       if (!contract) return toast("Connectez MetaMask d'abord", "error");
@@ -977,9 +975,16 @@
       if (window.ethereum && window.ethereum.selectedAddress) connectWallet();
     });
     window.ethereum?.on?.("accountsChanged", () => connectWallet());
-    window.ethereum?.on?.("chainChanged",    () => location.reload());
+    window.ethereum?.on?.("chainChanged", async () => {
+      const ok = await checkNetwork();
+      if (ok && !signer) await connectWallet();
+      else if (ok && signer) {
+        provider = new ethers.BrowserProvider(window.ethereum);
+        signer   = await provider.getSigner();
+        contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+        log("Réseau changé — reconnecté sur Sepolia", "ok");
+      }
+    });
   </script>
 </body>
 </html>
-
-
