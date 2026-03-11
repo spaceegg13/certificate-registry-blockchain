@@ -38,7 +38,7 @@ contract CertificateRegistry {
     }
     
     modifier certificateExists(uint256 _certificateId) {
-        require(_certificateId < nextCertificateId && _certificateId > 0, "Certificate does not exist");
+        require(_certificateId <= nextCertificateId && _certificateId > 0, "Certificate does not exist");
         _;
     }
     
@@ -184,4 +184,5 @@ contract CertificateRegistry {
     function getTotalCertificates() public view returns (uint256) {
         return nextCertificateId;
     }
+
 }
