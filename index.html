@@ -668,7 +668,7 @@
     async function checkNetwork() {
       if (!window.ethereum) return false;
       const chainId = await window.ethereum.request({ method: "eth_chainId" });
-      const isOk = chainId === SEPOLIA_CHAIN_ID;
+      const isOk = chainId === SEPOLIA_CHAIN_ID.toLowerCase();
       const pill = document.getElementById("networkPill");
       const pillText = document.getElementById("networkPillText");
       pill.style.display = "inline-flex";
@@ -729,14 +729,13 @@
     async function connectWallet() {
       if (!window.ethereum) return toast("MetaMask non détecté !", "error");
       try {
-        provider = new ethers.BrowserProvider(window.ethereum);
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
         await provider.send("eth_requestAccounts", []);
 
         const ok = await checkNetwork();
-        if (!ok) return; // gate overlay will show
-
-        signer   = await provider.getSigner();
+        if (!ok) return; // it'll stop if the network is wrong
         contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+        signer   = await provider.getSigner();
 
         const addr    = await signer.getAddress();
         const network = await provider.getNetwork();
@@ -980,3 +979,4 @@
   </script>
 </body>
 </html>
+
